@@ -1,163 +1,136 @@
 #!/usr/bin/env python
 import argparse
-from doctest import OutputChecker
 import socket
 import sys
 import time
+import os.path
 import shodan
 import config
-#from sympy import re
 
+##
 ### SEARCH PART
+##
 
-# Shodan API key
+
 api = shodan.Shodan(config.SHODAN_API_KEY)
+"""Shodan API key"""
 
-# Query by phrase, as a output return JSON with all data
+
 def search_by_phrase(search_phrase):
+    """
+    Query by phrase, as a output return JSON with all data
+    input: string
+    output: shodan raw data (JSON)
+    """
     try:
         results = api.search(search_phrase)
         return results
     except shodan.APIError as exception:
         print('Error msg in phrase: %s' % exception)
-        return 'n/a'
+        return None
 
-# Query by Host IP, as a output return JSON with all data about specyfic IP
+
 def search_by_host(search_host):
+    """
+    Query by Host IP, as a output return JSON with all data about specyfic IP
+    input: host name/IP 
+    output: shodan raw data (JSON) 
+    """
     try:
         host_ip = socket.gethostbyname(search_host)
         results = api.host(host_ip)
         return results
     except shodan.APIError as exception:
         print('Error msg: %s' % exception)
-        return 'n/a'
+        return None
 
-# Print IPs list from the JSON data returned from "search_by_phrase"
-def print_ip(data):
-    #print(data)
-    try:
-        for ip in data['matches']:
-            print(ip['ip_str'])
-    except Exception as exception:
-        print('Error msg in printIP: %s' % exception)
-
-# Print IPs with open ports
-def print_ports(ip_list):
-    try:
-        for ip in ip_list:
-            data = search_by_host(ip)
-            print('IP: ', data['ip_str'])
-            print('Ports: ', data['ports'])
-            time.sleep(1)
-    except Exception as exception:
-        print('Error msg in printPorts: %s' % exception)
-
-# Return IP list from the JSON data returned from "search_by_phrase"
+##
+### Data transform
+##
 def ip_list_creator(data):
+    """
+    Return IP list from the JSON data returned from search_by_phrase, only unique value
+    input: Shodan raw data (JSON)
+    output: list IPs
+    """
     ip_list = []
     try:
         for ip in data['matches']:
-            ip_list.append(ip['ip_str'])
+            if ip['ip_str'] not in ip_list:
+                ip_list.append(ip['ip_str']) 
         return ip_list
     except Exception as exception:
         print('Error msg in ipListCreator: %s' % exception)
-        return ip_list
+        return None
 
-# Return IP and ports list from the JSON data returned from "search_by_host" based on IP list
+
 def ports_list_creator(ip_list):
-    port_list = []
+    """
+    Return IP and ports list from the JSON data returned from search_by_host based on IP list
+    input: ip list
+    output: dictionary {IP: [ports]}
+    """
+    port_dict = {}
     try:
         for ip in ip_list:
             data = search_by_host(ip)
-            port_list.append([data['ip_str'], data['ports']])
+            port_dict.update({data['ip_str']: data['ports']})
             time.sleep(1)
-        return port_list
+        return port_dict
     except Exception as exception:
         print('Error msg in port_list_creator: %s' % exception)
-        return port_list
+        return None
 
 
-### I/O file part
+##
+### Files 
+##
 
-def read_file(file_name = 'phrases.txt'):
-    with open(file_name) as file:
-        for line in file:
-            print(line)
+def write_file(output, file_name = 'output.txt'):
+    """
+    Write data to txt file
+    input_1: data to be writen to the file
+    input_2: file name
+    output: n/a
+    """
+    try:
+        with open(file_name, 'w+') as file:
+            #file.writelines('%s\n' % line for line in output_list)
+            file.write(output)
+    except Exception as exception:
+        print('Error msg in write_file: %s' % exception)
 
-def output_file(output_list, file_name = 'output.txt'):
-    with open(file_name, 'w') as file:
-        file.writelines('%s\n' % line for line in output_list)
+def read_file(file_name = 'output.txt'):
+    """
+    Read file with phrases to query
+    input: file name
+    output: string from file
+    """
+    try:
+        if os.path.exists(file_name):
+            with open(file_name, "r") as file:
+                return file.read()
+    except Exception as exception:
+        print('Error msg in read_file: %s' % exception)
+        return None
 
-### Parser part
+##
+### Data
+##
 
-argParser = argparse.ArgumentParser(description= "Shodan search")
-
-argParser.add_argument("--phrase", dest = "phrase", help = "Search phrase", required = None)
-argParser.add_argument("--host", dest = "host", help = "Host IP or address", required = None)
-#test
-argParser.add_argument("--file", dest = "file", help = "Input file name", required = None)
-
-parsed_args = argParser.parse_args()
-
-if len(sys.argv) > 1 and sys.argv[1] == '--phrase':
-    #printIP(phrase(parsed_args.phrase))
-    list = ip_list_creator(search_by_phrase(parsed_args.phrase))
-    print_ports(list)
-    output_file(ports_list_creator(list))
-if len(sys.argv) > 1 and sys.argv[1] == '--host':
-    print_ip(search_by_host(parsed_args.host))
-    read_file()
-if len(sys.argv) > 1 and sys.argv[1] == '--file':
-    read_file(parsed_args.file)
-'''
-def printer(mode, results):
-    if results == 'n/a':
-        print('No data available!')
-    else:
-        if mode == 'phrase':
-            print('Findings: %s' % results['total'])
-            for result in results['matches']:
-                print('IP: %s' % result['ip_str'])
-                print(result['data'])
-        elif mode == 'host':
-            print("""
-                IP: %s
-                Org: %s
-                OS: %s        
-            """ % (results['ip_str'], results.get('org', 'n/a'), results.get('os', 'n/a')))
-            for result in results['data']:
-                print("""
-                    Port: %s
-                    Baner: %s""" 
-                    % (result['port'], result['data']))
-
-
-argParser = argparse.ArgumentParser(description= "Shodan search")
-
-argParser.add_argument("--host", dest = "host", help = "Host IP or address", required = None)
-argParser.add_argument("--phrase", dest = "phrase", help = "Search phrase", required = None)
-argParser.add_argument("--multiple", dest = "multiple", help = "Search info about all IPs with phrase", required = None)
-parsed_args = argParser.parse_args()
-
-if len(sys.argv) > 1 and sys.argv[1] == '--phrase':
-    printer('phrase', phrase(parsed_args.phrase))
-if len(sys.argv) > 1 and sys.argv[1] == '--host':
-    printer('host', host(parsed_args.host))
-if len(sys.argv) > 1 and sys.argv[1] == '--multiple':
-    results = phrase(parsed_args.multiple)
-    reportData = []
-    hostsIP = []
-    if results != 'n/a':
-        for result in results['matches']:
-            if not (result['ip_str'] in hostsIP):
-                hostsIP.append(result['ip_str'])
-                hostData = host(result['ip_str'])
-                parsedData = report.parser(hostData)
-                reportData.append(parsedData)
-                printer('host', hostData)
-                time.sleep(1)
-    print(reportData)
-    report.createReport(reportData)
-
-
-'''
+def data_collector(list_of_str):
+    """
+    Collect IPs makeing search based on phrases in list_of_str
+    input: List - searched phrased
+    output: dictionary {IP: ports}
+    """
+    try:
+        output = {}
+        if type(list_of_str) == str: list_of_str = [list_of_str]
+        for phrase in list_of_str:
+            ip_list = ip_list_creator(search_by_phrase(phrase))
+            output.update(ports_list_creator(ip_list))
+        return output
+    except Exception as exception:
+        print('Error msg in data_collector: %s' % exception)
+        return None
