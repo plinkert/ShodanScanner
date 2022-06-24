@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 import argparse
+import os.path
 import socket
 import sys
 import time
-import os.path
+
 import shodan
+
 import config
 
 ##
@@ -134,3 +136,18 @@ def data_collector(list_of_str):
     except Exception as exception:
         print('Error msg in data_collector: %s' % exception)
         return None
+
+
+def data_compare(new_data, old_data):
+    try:
+        new_keys = set(new_data.keys())
+        old_keys = set(old_data.keys())
+        shared_keys = new_keys.intersection(old_keys)
+        added = new_keys - old_keys
+        removed = old_keys - new_keys
+        modified = {o: (new_data[o], old_data[o]) for o in shared_keys if new_data[o] != old_data[o]}
+        same = set(o for o in shared_keys if new_data[o] == old_data[o])
+        return added, removed, modified, same
+    except Exception as exception:
+        print('Error msg in data_compare: %s' % exception)
+        return None, None, None, None
